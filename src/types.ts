@@ -2,6 +2,8 @@ export interface Point {
   x: number;
   y: number;
   groupId?: string;
+  timestamp?: number;
+  selected?: boolean;
 }
 
 export interface Line {
@@ -21,3 +23,10 @@ export interface PointGroup {
 }
 
 export type Mode = 'add' | 'select';
+
+export interface PointHistory {
+  points: Point[];
+  lines: Line[];
+}
+
+export type SortType = 'coordinate' | 'timestamp' | 'group';

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useHotkeys } from 'react-hotkeys-hook';
 import { useGridPoints } from '../hooks/useGridPoints';
 import { Point } from '../types';
 import GridControls from './GridControls';
@@ -11,7 +12,7 @@ export default function GridPlot() {
     points,
     lines,
     groups,
-    selectedPoint,
+    selectedPoints,
     mode,
     setMode,
     addPoint,
@@ -19,10 +20,30 @@ export default function GridPlot() {
     updatePoint,
     resetGrid,
     addGroup,
+    updateGroupColor,
     deleteGroup,
     assignToGroup,
-    handlePointClick
+    togglePointSelection,
+    selectAllPoints,
+    undo,
+    redo
   } = useGridPoints();
+
+  // Keyboard shortcuts
+  useHotkeys('ctrl+z, cmd+z', (e) => {
+    e.preventDefault();
+    undo();
+  });
+
+  useHotkeys('ctrl+shift+z, cmd+shift+z', (e) => {
+    e.preventDefault();
+    redo();
+  });
+
+  useHotkeys('ctrl+a, cmd+a', (e) => {
+    e.preventDefault();
+    selectAllPoints();
+  });
 
   const handleGridClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -32,9 +53,11 @@ export default function GridPlot() {
     if (x >= 0 && x <= gridSize.x && y >= 0 && y <= gridSize.y) {
       const clickedPoint = points.find(p => p.x === x && p.y === y);
       if (clickedPoint) {
-        handlePointClick(clickedPoint);
+        if (mode === 'select') {
+          togglePointSelection(clickedPoint, e.shiftKey);
+        }
       } else if (mode === 'add') {
-        addPoint({ x, y });
+        addPoint({ x, y, timestamp: Date.now() });
       }
     }
   };
@@ -54,6 +77,8 @@ export default function GridPlot() {
             groups={groups}
             mode={mode}
             setMode={setMode}
+            onUndo={undo}
+            onRedo={redo}
           />
           
           <div 
@@ -94,14 +119,22 @@ export default function GridPlot() {
             {points.map((point, index) => (
               <div
                 key={index}
-                className={`absolute w-3 h-3 rounded-full transform -translate-x-1.5 -translate-y-1.5 cursor-pointer
-                  ${selectedPoint === point ? 'ring-2 ring-offset-2 ring-blue-500' : ''}`}
+                className={`absolute w-4 h-4 -translate-x-2 -translate-y-2 cursor-pointer
+                  hover:ring-2 hover:ring-offset-2 hover:ring-blue-500 transition-all
+                  ${point.selected ? 'ring-2 ring-offset-2 ring-blue-500 scale-125' : ''}`}
                 style={{
                   left: `${(point.x / gridSize.x) * 100}%`,
                   top: `${(point.y / gridSize.y) * 100}%`,
                   backgroundColor: point.groupId 
                     ? groups.find(g => g.id === point.groupId)?.color 
-                    : '#3B82F6'
+                    : '#3B82F6',
+                  borderRadius: '50%'
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (mode === 'select') {
+                    togglePointSelection(point, e.shiftKey);
+                  }
                 }}
               />
             ))}
@@ -112,10 +145,11 @@ export default function GridPlot() {
           <PointsList 
             points={points}
             groups={groups}
-            selectedPoint={selectedPoint}
+            selectedPoint={selectedPoints[0]}
             onDeletePoint={deletePoint}
             onAssignGroup={assignToGroup}
             onUpdatePoint={updatePoint}
+            onUpdateGroupColor={updateGroupColor}
           />
           <ExportFormat points={points} />
         </div>

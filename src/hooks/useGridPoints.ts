@@ -1,57 +1,97 @@
-import { useState } from 'react';
-import { Point, Line, PointGroup, Mode } from '../types';
+import { useState, useCallback } from 'react';
+import { Point, Line, PointGroup, Mode, PointHistory } from '../types';
 
 export function useGridPoints() {
   const [points, setPoints] = useState<Point[]>([]);
   const [lines, setLines] = useState<Line[]>([]);
   const [groups, setGroups] = useState<PointGroup[]>([]);
-  const [selectedPoint, setSelectedPoint] = useState<Point | null>(null);
+  const [selectedPoints, setSelectedPoints] = useState<Point[]>([]);
   const [mode, setMode] = useState<Mode>('add');
+  const [history, setHistory] = useState<PointHistory[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
+  const addToHistory = useCallback((newPoints: Point[], newLines: Line[]) => {
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push({ points: [...newPoints], lines: [...newLines] });
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+  }, [history, historyIndex]);
+
+  const undo = useCallback(() => {
+    if (historyIndex > 0) {
+      const prevState = history[historyIndex - 1];
+      setPoints([...prevState.points]);
+      setLines([...prevState.lines]);
+      setHistoryIndex(historyIndex - 1);
+    }
+  }, [history, historyIndex]);
+
+  const redo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      const nextState = history[historyIndex + 1];
+      setPoints([...nextState.points]);
+      setLines([...nextState.lines]);
+      setHistoryIndex(historyIndex + 1);
+    }
+  }, [history, historyIndex]);
 
   const addPoint = (point: Point) => {
-    setPoints((prev) => [...prev, point]);
+    const newPoints = [...points, { ...point, selected: false }];
+    setPoints(newPoints);
+    addToHistory(newPoints, lines);
   };
 
   const deletePoint = (pointToDelete: Point) => {
-    setPoints((prev) => prev.filter(p => !(p.x === pointToDelete.x && p.y === pointToDelete.y)));
-    setLines((prev) => prev.filter(line => 
-      !(line.start.x === pointToDelete.x && line.start.y === pointToDelete.y) &&
-      !(line.end.x === pointToDelete.x && line.end.y === pointToDelete.y)
-    ));
-    if (selectedPoint?.x === pointToDelete.x && selectedPoint?.y === pointToDelete.y) {
-      setSelectedPoint(null);
-    }
+    const newPoints = points.filter(p => !isSamePoint(p, pointToDelete));
+    const newLines = lines.filter(line => 
+      !isSamePoint(line.start, pointToDelete) && !isSamePoint(line.end, pointToDelete)
+    );
+    
+    setPoints(newPoints);
+    setLines(newLines);
+    setSelectedPoints(selectedPoints.filter(p => !isSamePoint(p, pointToDelete)));
+    addToHistory(newPoints, newLines);
   };
 
   const updatePoint = (oldPoint: Point, newPoint: Point) => {
-    setPoints((prev) => prev.map(p => 
-      p.x === oldPoint.x && p.y === oldPoint.y ? newPoint : p
-    ));
+    const newPoints = points.map(p => 
+      isSamePoint(p, oldPoint) ? { ...newPoint, selected: p.selected } : p
+    );
     
-    setLines((prev) => prev.map(line => ({
-      start: line.start.x === oldPoint.x && line.start.y === oldPoint.y ? newPoint : line.start,
-      end: line.end.x === oldPoint.x && line.end.y === oldPoint.y ? newPoint : line.end
-    })));
+    const newLines = lines.map(line => ({
+      start: isSamePoint(line.start, oldPoint) ? newPoint : line.start,
+      end: isSamePoint(line.end, oldPoint) ? newPoint : line.end
+    }));
 
-    if (selectedPoint?.x === oldPoint.x && selectedPoint?.y === oldPoint.y) {
-      setSelectedPoint(newPoint);
-    }
+    setPoints(newPoints);
+    setLines(newLines);
+    setSelectedPoints(selectedPoints.map(p => 
+      isSamePoint(p, oldPoint) ? newPoint : p
+    ));
+    addToHistory(newPoints, newLines);
   };
 
   const resetGrid = () => {
     setPoints([]);
     setLines([]);
-    setSelectedPoint(null);
+    setSelectedPoints([]);
+    setHistory([]);
+    setHistoryIndex(-1);
   };
 
-  const addGroup = (name: string) => {
-    const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#6366F1'];
+  const addGroup = (name: string, color: string) => {
     const newGroup: PointGroup = {
       id: Date.now().toString(),
       name,
-      color: colors[groups.length % colors.length]
+      color
     };
     setGroups((prev) => [...prev, newGroup]);
+  };
+
+  const updateGroupColor = (groupId: string, color: string) => {
+    setGroups(prev => prev.map(group => 
+      group.id === groupId ? { ...group, color } : group
+    ));
   };
 
   const deleteGroup = (groupId: string) => {
@@ -61,36 +101,50 @@ export function useGridPoints() {
     ));
   };
 
-  const assignToGroup = (point: Point, groupId: string) => {
-    setPoints((prev) => prev.map(p => 
-      p.x === point.x && p.y === point.y ? { ...p, groupId } : p
-    ));
+  const assignToGroup = (point: Point | Point[], groupId: string) => {
+    const pointsToUpdate = Array.isArray(point) ? point : [point];
+    const newPoints = points.map(p => 
+      pointsToUpdate.some(selected => isSamePoint(selected, p))
+        ? { ...p, groupId }
+        : p
+    );
+    setPoints(newPoints);
+    addToHistory(newPoints, lines);
   };
 
   const isSamePoint = (p1: Point, p2: Point) => {
     return p1.x === p2.x && p1.y === p2.y;
   };
 
-  const handlePointClick = (point: Point) => {
-    if (mode === 'select') {
-      setSelectedPoint(selectedPoint && isSamePoint(selectedPoint, point) ? null : point);
-    } else {
-      if (selectedPoint) {
-        if (!isSamePoint(selectedPoint, point)) {
-          setLines((prev) => [...prev, { start: selectedPoint, end: point }]);
-        }
-        setSelectedPoint(null);
-      } else {
-        setSelectedPoint(point);
-      }
-    }
+  const togglePointSelection = (point: Point, isShiftKey: boolean) => {
+    const newPoints = points.map(p => ({
+      ...p,
+      selected: isSamePoint(p, point) 
+        ? isShiftKey ? !p.selected : true
+        : isShiftKey ? p.selected : false
+    }));
+    
+    setPoints(newPoints);
+    setSelectedPoints(newPoints.filter(p => p.selected));
+  };
+
+  const selectAllPoints = () => {
+    const newPoints = points.map(p => ({ ...p, selected: true }));
+    setPoints(newPoints);
+    setSelectedPoints(newPoints);
+  };
+
+  const clearSelection = () => {
+    const newPoints = points.map(p => ({ ...p, selected: false }));
+    setPoints(newPoints);
+    setSelectedPoints([]);
   };
 
   return {
     points,
     lines,
     groups,
-    selectedPoint,
+    selectedPoints,
     mode,
     setMode,
     addPoint,
@@ -98,8 +152,13 @@ export function useGridPoints() {
     updatePoint,
     resetGrid,
     addGroup,
+    updateGroupColor,
     deleteGroup,
     assignToGroup,
-    handlePointClick
+    togglePointSelection,
+    selectAllPoints,
+    clearSelection,
+    undo,
+    redo
   };
 }

@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
 import { GridSize, PointGroup } from '../types';
-import { Trash2, Plus, X } from 'lucide-react';
+import { Trash2, Plus, X, Undo, Redo } from 'lucide-react';
 import ModeToggle from './ModeToggle';
+import ColorPicker from './ColorPicker';
 
 interface GridControlsProps {
   gridSize: GridSize;
   setGridSize: (size: GridSize) => void;
   onReset: () => void;
-  onAddGroup: (name: string) => void;
+  onAddGroup: (name: string, color: string) => void;
   onDeleteGroup: (groupId: string) => void;
   groups: PointGroup[];
   mode: 'add' | 'select';
   setMode: (mode: 'add' | 'select') => void;
+  onUndo: () => void;
+  onRedo: () => void;
 }
 
 export default function GridControls({ 
@@ -22,14 +25,20 @@ export default function GridControls({
   onDeleteGroup, 
   groups,
   mode,
-  setMode
+  setMode,
+  onUndo,
+  onRedo
 }: GridControlsProps) {
   const [newGroupName, setNewGroupName] = useState('');
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [selectedColor, setSelectedColor] = useState('#3B82F6');
 
   const handleAddGroup = () => {
     if (newGroupName.trim()) {
-      onAddGroup(newGroupName.trim());
+      onAddGroup(newGroupName.trim(), selectedColor);
       setNewGroupName('');
+      setShowColorPicker(false);
+      setSelectedColor('#3B82F6');
     }
   };
 
@@ -64,13 +73,29 @@ export default function GridControls({
           />
         </div>
 
-        <button
-          onClick={onReset}
-          className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 flex items-center gap-2"
-        >
-          <Trash2 size={16} />
-          Reset Grid
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={onUndo}
+            className="px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 flex items-center gap-1"
+            title="Undo (Ctrl+Z)"
+          >
+            <Undo size={16} />
+          </button>
+          <button
+            onClick={onRedo}
+            className="px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 flex items-center gap-1"
+            title="Redo (Ctrl+Shift+Z)"
+          >
+            <Redo size={16} />
+          </button>
+          <button
+            onClick={onReset}
+            className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 flex items-center gap-2"
+          >
+            <Trash2 size={16} />
+            Reset Grid
+          </button>
+        </div>
       </div>
 
       <ModeToggle mode={mode} setMode={setMode} />
@@ -80,14 +105,32 @@ export default function GridControls({
           <label htmlFor="group-name" className="block text-sm font-medium text-gray-700">
             New Group Name
           </label>
-          <input
-            type="text"
-            id="group-name"
-            value={newGroupName}
-            onChange={(e) => setNewGroupName(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-            placeholder="Enter group name"
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              id="group-name"
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              placeholder="Enter group name"
+            />
+            <div className="relative">
+              <button
+                onClick={() => setShowColorPicker(!showColorPicker)}
+                className="mt-1 w-10 h-10 rounded border"
+                style={{ backgroundColor: selectedColor }}
+              />
+              {showColorPicker && (
+                <div className="absolute z-10 mt-2">
+                  <ColorPicker
+                    color={selectedColor}
+                    onChange={setSelectedColor}
+                    onClose={() => setShowColorPicker(false)}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
         </div>
         <button
           onClick={handleAddGroup}
