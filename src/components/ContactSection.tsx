@@ -7,7 +7,7 @@ export default function ContactSection() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    window.location.href = `mailto:visualyindiedev@gmail.com?subject=Grid Plotting App Feedback&body=${encodeURIComponent(message)}`;
+    window.location.href = `mailto:visuallyindiedev@gmail.com?subject=Grid Plotting App Feedback&body=${encodeURIComponent(message)}`;
     setMessage('');
     setStatus('success');
     setTimeout(() => setStatus('idle'), 3000);
